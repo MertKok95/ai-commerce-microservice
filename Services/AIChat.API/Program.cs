@@ -5,7 +5,6 @@ using System.Text.Json;
 var builder = WebApplication.CreateBuilder(args);
 var geminiSettings = builder.Configuration.GetSection("Gemini");
 
-// SSL Hatalarını atlamak için özel HttpClient ayarı
 var handler = new HttpClientHandler
 {
     ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
@@ -18,8 +17,6 @@ app.MapPost("/api/chat", async (ChatRequestDto request, HttpClient httpClient) =
 {
     var apiKey = geminiSettings["ApiKey"]?.Trim();
     
-    // Model bilgisini statik yazmak yerine doğrudan appsettings.json'dan alıyoruz
-    // (Eğer appsettings'de bulamazsa güvenlik amaçlı varsayılan bir modele düşer)
     var modelId = geminiSettings["ModelId"]?.Trim() ?? "gemini-3.5-flash-lite";
     
     var url = "https://generativelanguage.googleapis.com/v1beta/interactions";
@@ -43,7 +40,6 @@ app.MapPost("/api/chat", async (ChatRequestDto request, HttpClient httpClient) =
         return Results.Problem($"API Hatası: {response.StatusCode} - {responseContent}");
     }
 
-    // Google'ın yanıtından yalnızca "model_output" kısmındaki asistan metnini ayıkla
     using var jsonResponse = JsonDocument.Parse(responseContent);
     string answer = "Yanıt oluşturulamadı.";
     
