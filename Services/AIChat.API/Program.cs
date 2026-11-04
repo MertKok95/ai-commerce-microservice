@@ -1,28 +1,65 @@
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
 using AIChat.API.DTOs;
+using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+var geminiSettings = builder.Configuration.GetSection("Gemini");
 
-var openAiSettings = builder.Configuration.GetSection("OpenAI");
-builder.Services.AddKernel();
-builder.Services.AddOpenAIChatCompletion(
-    modelId: openAiSettings["ModelId"]!,
-    apiKey: openAiSettings["ApiKey"]!
-);
+// SSL Hatalarını atlamak için özel HttpClient ayarı
+var handler = new HttpClientHandler
+{
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+};
+builder.Services.AddSingleton(new HttpClient(handler));
 
 var app = builder.Build();
 
-app.MapPost("/api/chat", async (ChatRequestDto request, Kernel kernel) =>
+app.MapPost("/api/chat", async (ChatRequestDto request, HttpClient httpClient) =>
 {
-    var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+    var apiKey = geminiSettings["ApiKey"]?.Trim();
     
-    var chatHistory = new ChatHistory("Sen yetenekli bir e-ticaret asistanısın. Müşterilere elektronik ve mobilya kategorisindeki ürünlerimizi tanıtıp satışa yönlendirirsin.");
-    chatHistory.AddUserMessage(request.Message);
+    // Model bilgisini statik yazmak yerine doğrudan appsettings.json'dan alıyoruz
+    // (Eğer appsettings'de bulamazsa güvenlik amaçlı varsayılan bir modele düşer)
+    var modelId = geminiSettings["ModelId"]?.Trim() ?? "gemini-3.5-flash-lite";
     
-    var response = await chatCompletionService.GetChatMessageContentAsync(chatHistory, kernel: kernel);
+    var url = "https://generativelanguage.googleapis.com/v1beta/interactions";
+
+    var payload = new
+    {
+        model = modelId,
+        input = $"Sen yetenekli bir e-ticaret asistanısın. Müşteriye şu soru için satışa yönlendiren bir yanıt ver: {request.Message}"
+    };
+
+    var requestMessage = new HttpRequestMessage(HttpMethod.Post, url);
+    requestMessage.Headers.Add("x-goog-api-key", apiKey);
+    requestMessage.Headers.Add("Api-Revision", "2026-05-20");
+    requestMessage.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+    var response = await httpClient.SendAsync(requestMessage);
+    var responseContent = await response.Content.ReadAsStringAsync();
+
+    if (!response.IsSuccessStatusCode)
+    {
+        return Results.Problem($"API Hatası: {response.StatusCode} - {responseContent}");
+    }
+
+    // Google'ın yanıtından yalnızca "model_output" kısmındaki asistan metnini ayıkla
+    using var jsonResponse = JsonDocument.Parse(responseContent);
+    string answer = "Yanıt oluşturulamadı.";
     
-    return Results.Ok(new ChatResponseDto(response.Content ?? "No response generated."));
+    if (jsonResponse.RootElement.TryGetProperty("steps", out var steps))
+    {
+        foreach (var step in steps.EnumerateArray())
+        {
+            if (step.GetProperty("type").GetString() == "model_output")
+            {
+                answer = step.GetProperty("content")[0].GetProperty("text").GetString() ?? answer;
+                break;
+            }
+        }
+    }
+
+    return Results.Ok(new ChatResponseDto(answer));
 });
 
 app.Run();
