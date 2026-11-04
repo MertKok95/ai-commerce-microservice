@@ -71,7 +71,7 @@ Ensure `appsettings.json` files are also created in the respective directories f
 
 1. Clone the repository to your local machine:
 ```bash
-git clone https://github.com/YOUR_USERNAME/ai-commerce-microservices.git
+git clone https://github.com/MertKok95/ai-commerce-microservices.git
 cd ai-commerce-microservices
 ```
 
