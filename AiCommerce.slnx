@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Services/">
+    <Project Path="Services/AIChat.API/AIChat.API.csproj" />
+    <Project Path="Services/Catalog.API/Catalog.API.csproj" />
+    <Project Path="Services/Payment.API/Payment.API.csproj" />
+  </Folder>
+</Solution>
